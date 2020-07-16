@@ -30,9 +30,17 @@ int DDS_MPI::Initialize(int &argc, char* argv[])
     //3. Creamos un participante de dominio
     // domain-id = 0, Qos modificadas, listener = nullptr, Status mask = all
     DomainParticipantQos participant_qos = participantFactory ->get_default_participant_qos();
-    participant_qos.transport().use_builtin_transports = false;
-    std::shared_ptr<SharedMemTransportDescriptor> shm_transport = std::make_shared<SharedMemTransportDescriptor>();
-    participant_qos.transport().user_transports.push_back(shm_transport);
+    int transport = 0;
+    GetArg(argc,argv,"-t", transport);
+    if(transport == 0){
+        std::cout << "Tipo de transporte: UDPv4" << std::endl; 
+    }else{
+        participant_qos.transport().use_builtin_transports = false;
+        std::shared_ptr<SharedMemTransportDescriptor> shm_transport = std::make_shared<SharedMemTransportDescriptor>();
+        participant_qos.transport().user_transports.push_back(shm_transport);
+        std::cout << "Tipo de transporte: SHM" << std::endl; 
+    }
+
     participant = participantFactory -> create_participant(0, participant_qos);
     if(participant == nullptr){
         std::cerr << "Error in Initialize(): create_participant" << std::endl;

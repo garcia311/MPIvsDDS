@@ -66,6 +66,7 @@ namespace eprosima
 
 namespace MPIMessage
 {
+    const int32_t MAX_SIZE = 100000;
     typedef std::vector<uint8_t> OctetSequence;
     /*!
      * @brief This class represents the structure Message defined by the user in the IDL file.

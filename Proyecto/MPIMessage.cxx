@@ -33,15 +33,16 @@ using namespace eprosima::fastcdr::exception;
 #include <utility>
 
 
+
 MPIMessage::Message::Message()
 {
-    // m_buffer com.eprosima.idl.parser.typecode.AliasTypeCode@282003e1
+    // m_buffer com.eprosima.idl.parser.typecode.AliasTypeCode@49e202ad
 
-    // m_senderRank com.eprosima.idl.parser.typecode.PrimitiveTypeCode@7fad8c79
+    // m_senderRank com.eprosima.idl.parser.typecode.PrimitiveTypeCode@1c72da34
     m_senderRank = 0;
-    // m_recipientRank com.eprosima.idl.parser.typecode.PrimitiveTypeCode@71a794e5
+    // m_recipientRank com.eprosima.idl.parser.typecode.PrimitiveTypeCode@6b0c2d26
     m_recipientRank = 0;
-    // m_tag com.eprosima.idl.parser.typecode.PrimitiveTypeCode@76329302
+    // m_tag com.eprosima.idl.parser.typecode.PrimitiveTypeCode@3d3fcdb0
     m_tag = 0;
 
 }
@@ -99,7 +100,7 @@ size_t MPIMessage::Message::getMaxCdrSerializedSize(size_t current_alignment)
 
     current_alignment += 4 + eprosima::fastcdr::Cdr::alignment(current_alignment, 4);
 
-    current_alignment += (100 * 1) + eprosima::fastcdr::Cdr::alignment(current_alignment, 1);
+    current_alignment += (MAX_SIZE * 1) + eprosima::fastcdr::Cdr::alignment(current_alignment, 1);
 
 
 
@@ -307,4 +308,3 @@ void MPIMessage::Message::serializeKey(eprosima::fastcdr::Cdr &scdr) const
      scdr << m_recipientRank;  
      
 }
-

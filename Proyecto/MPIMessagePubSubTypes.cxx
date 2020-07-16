@@ -31,6 +31,7 @@ using namespace eprosima::fastrtps::rtps;
 namespace MPIMessage
 {
 
+
     MessagePubSubType::MessagePubSubType()
     {
         setName("MPIMessage::Message");

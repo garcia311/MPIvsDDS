@@ -34,6 +34,7 @@
 
 namespace MPIMessage
 {
+
     typedef std::vector<uint8_t> OctetSequence;
     /*!
      * @brief This class represents the TopicDataType of the type Message defined by the user in the IDL file.
