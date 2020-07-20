@@ -32,6 +32,10 @@ int main(int argc, char * argv[]){
     GetArg(argc, argv, ACE_TEXT("-i"), numIterations);
     GetArg(argc, argv, ACE_TEXT("-n"), numIntegers);
 
+    std::cout << "---------Prueba de rendimiento---------" << std::endl;
+    std::cout << "Número de iteraciones: " << numIterations << std::endl;
+    std::cout << "Número de enteros (integers): " << numIntegers << std::endl;
+    std::cout << std::endl;
     DDS_MPI p;
 
 

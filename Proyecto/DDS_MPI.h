@@ -16,6 +16,7 @@
 #include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
 #include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
 #include <vector>
+#include <condition_variable>
 
 #define DDSMPI_BROADCAST -1
 #define DDSMPI_ANY_SOURCE -1
@@ -62,8 +63,10 @@ public:
     // Constructor
     DDS_MPI()
         : participant(nullptr)
-        //, publisher(nullptr)
+        , publisher(nullptr)
+        , writer(nullptr)
         , subscriber(nullptr)
+        , reader (nullptr)
         , topic(nullptr)
         , type (new MPIMessage::MessagePubSubType()) // Comprobar si es necesario que sea así
         , rank(0)
@@ -90,7 +93,7 @@ public:
      */
     int Initialize(int &argc, char* argv[]); 
 
-    void Finalize();
+    int Finalize();
 
     int Send(void *buf, int count, int dest, int tag);
 
@@ -139,7 +142,7 @@ private:
 
     bool initialized; // Estado de la clase. Indica si se ha inicializado o no.
 
-    int group; // Grupo de pertenencia
+    //int group; // Grupo de pertenencia
 
     // LISTENERS
     // Listener del publicador
@@ -174,10 +177,13 @@ private:
                 std::cout << info.current_count_change
                         << " is not a valid value for PublicationMatchedStatus current count change." << std::endl;
             }
+            cv.notify_all();
         }
 
 
         std::atomic_int matched;
+        std::condition_variable cv;
+        std::mutex mutex;
     } pubListener;
 
     // Listener del suscriptor
@@ -213,6 +219,7 @@ private:
                 std::cout << info.current_count_change
                         << " is not a valid value for SubscriptionMatchedStatus current count change" << std::endl;
             }
+            cv.notify_all();
         }
 
         void on_data_available(
@@ -222,7 +229,8 @@ private:
         }
 
         std::atomic_int matched;
-
+        std::condition_variable cv;
+        std::mutex mutex;
     } subListener;
 
     // FUNCIONES PRIVADAS (auxiliares)

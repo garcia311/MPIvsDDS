@@ -3,12 +3,12 @@
 #include <stdlib.h>
 #include <string>
 #include <algorithm>    // std::copy
-#include <sstream>
+
 #include <fastrtps/types/TypesBase.h>
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
 
 
-// FUNCIONES PUBLICAS
+//---------- FUNCIONES PUBLICAS ----------
 int DDS_MPI::Initialize(int &argc, char* argv[])
 {
     //std::cout << "Se ha llamado a Initialize" << std::endl;
@@ -25,20 +25,41 @@ int DDS_MPI::Initialize(int &argc, char* argv[])
         return DDSMPI_ERR_RANK;
     }
     //2. Creamos la fabrica de participantes. Se utiliza para crear o eliminar participantes.
+    // DomainParticipantFactory es un singleton que se accede a el lanzando la función estática get_instance()
+    // Dejamos las QoS de DomainParticipantFactory por defecto. Solo hay una QoS, autoenable_created_entities, que por defecto está a true
     participantFactory = DomainParticipantFactory::get_instance();
 
     //3. Creamos un participante de dominio
     // domain-id = 0, Qos modificadas, listener = nullptr, Status mask = all
-    DomainParticipantQos participant_qos = participantFactory ->get_default_participant_qos();
-    int transport = 0;
+    DomainParticipantQos participant_qos = participantFactory -> get_default_participant_qos();
+    
+    // ----Cofiguración de las QoS----
+    // UserDataQosPolicy, EntityFactoryQosPolicy : Por defecto
+    // ParticipantResourceLimitsQos
+    // -RemoteLocatorsAllocationAttributes : Por defecto
+    // -ResourceLimitedContainerConfig : Por defecto
+    // -SendBuffersAllocationAttributes : Por defecto
+    // -VariableLengthDataLimits : Por defecto
+    // PropertyPolicyQos : Por defecto
+    // WireProtocolConfigQos : Por defecto
+    // TransportConfigQos
+    int transport = 2; // Por defecto, UDPv4 normal
     GetArg(argc,argv,"-t", transport);
-    if(transport == 0){
-        std::cout << "Tipo de transporte: UDPv4" << std::endl; 
-    }else{
+    if(transport == 0){ // UDPv4 modificada
+        participant_qos.transport().use_builtin_transports = false;
+        std::shared_ptr<UDPv4TransportDescriptor> udp_transport = std::make_shared<UDPv4TransportDescriptor>();
+        udp_transport -> sendBufferSize = 9216;
+        udp_transport -> receiveBufferSize = 9216;
+        udp_transport -> non_blocking_send = true;
+        participant_qos.transport().user_transports.push_back(udp_transport);
+        std::cout << "Tipo de transporte: UDPv4 modificado" << std::endl; 
+    }else if(transport == 1){ // SHM
         participant_qos.transport().use_builtin_transports = false;
         std::shared_ptr<SharedMemTransportDescriptor> shm_transport = std::make_shared<SharedMemTransportDescriptor>();
         participant_qos.transport().user_transports.push_back(shm_transport);
         std::cout << "Tipo de transporte: SHM" << std::endl; 
+    }else{ // UDPv4 normal
+        std::cout << "Tipo de transporte: UDPv4 por defecto" << std::endl; 
     }
 
     participant = participantFactory -> create_participant(0, participant_qos);
@@ -48,13 +69,13 @@ int DDS_MPI::Initialize(int &argc, char* argv[])
     }
 
     //4. Registramos el tipo 
-    if(type.register_type(participant) != eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK){
+    if(type.register_type(participant, type.get_type_name()) != eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK){
         std::cerr << "Error in Initialize(): register_type" << std::endl;
         return DDSMPI_INIT_ERROR;
     }
 
     //5. Creamos el topic
-    // Lo creamos con Qos por defecto, listener = nullptr, Status masl = all
+    // Lo creamos con Qos por defecto, listener = nullptr, Status mask = all
     std::string type_name = type.get_type_name();
     //std::cout << type_name << std::endl;
     topic = participant -> create_topic("MPITopic", type_name, TOPIC_QOS_DEFAULT);
@@ -64,22 +85,35 @@ int DDS_MPI::Initialize(int &argc, char* argv[])
     }
 
     //6. Creamos el publisher y data writer
-    typedef std::vector<std::string> StringSeq;
-    StringSeq part;
+    //typedef std::vector<std::string> StringSeq;
+    //StringSeq part;
     PublisherQos pub_qos;
-    participant->get_default_publisher_qos(pub_qos);
+    // ----Cofiguración de las QoS del publisher----
+    // Por defecto
+    participant -> get_default_publisher_qos(pub_qos);
     publisher = participant -> create_publisher(pub_qos);
     if(publisher == nullptr){
         std::cerr << "Error in Initialize(): create_publisher" << std::endl;
         return DDSMPI_INIT_ERROR;
     }
-    // QoS del dataWriter modo RELIABLE
+    
     ReliabilityQosPolicy reliability;
-    reliability.kind = RELIABLE_RELIABILITY_QOS;
+    // ----Configuración de las QoS del DataWriter----
+    DurabilityQosPolicy durability;
+    durability.kind = VOLATILE_DURABILITY_QOS;
+    
+    reliability.kind = BEST_EFFORT_RELIABILITY_QOS;
     reliability.max_blocking_time={0,100000}; //{second,nsecond} 100ms
+    
+    PublishModeQosPolicy publish_mode;
+    publish_mode.kind = ASYNCHRONOUS_PUBLISH_MODE;
+
     DataWriterQos dw_qos;
     publisher -> get_default_datawriter_qos(dw_qos);
     dw_qos.reliability(reliability);
+    dw_qos.durability(durability);
+    dw_qos.publish_mode(publish_mode);
+
     writer = publisher -> create_datawriter(topic, dw_qos, &pubListener);
     if(writer == nullptr){
         std::cerr << "Error in Initialize(): create_datawriter" << std::endl;
@@ -95,27 +129,40 @@ int DDS_MPI::Initialize(int &argc, char* argv[])
 
     //8. Creamos el subscriber y dataReader 
     SubscriberQos sub_qos;
+    // ----Cofiguración de las QoS del publisher----
+    // Por defecto
     participant ->get_default_subscriber_qos(sub_qos);
     subscriber = participant -> create_subscriber(sub_qos);
     if(subscriber == nullptr){
         std::cerr << "Error in Initialize(): create_subscriber" << std::endl;
         return DDSMPI_INIT_ERROR;
     }
+
     DataReaderQos dr_qos;
+    // ----Configuración de las QoS del DataWriter----
     subscriber -> get_default_datareader_qos(dr_qos);
     dr_qos.reliability(reliability);
+    dr_qos.durability(durability);
+
     reader = subscriber -> create_datareader(topic, dr_qos, &subListener);
     if(reader == nullptr){
         std::cerr << "Error in Initialize(): create_datareader" << std::endl;
         return DDSMPI_INIT_ERROR;
     }
 
-    // Esperamos por las asociaciones entre el dataReader y dataWriter
+    //9. Esperamos por las asociaciones entre el dataReader y dataWriter
     // Wait del publicador
+    /*
+    std::unique_lock<std::mutex> lock(pubListener.mutex);
+    pubListener.cv.wait(lock, [&pubListener] 
+    {
+        return pubListener.matched;
+    });
+    */
     while(true){
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         if(pubListener.matched==size){
-            std::cout <<"PRUEBA 1"<<std::endl;
+            //std::cout <<"PRUEBA: Wait publisher"<<std::endl;
             break;
         }
     }
@@ -123,11 +170,10 @@ int DDS_MPI::Initialize(int &argc, char* argv[])
      while(true){
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         if(subListener.matched==size){
-            std::cout <<"PRUEBA 2"<<std::endl;
+            //std::cout <<"PRUEBA: Wait subscriber"<<std::endl;
             break;
         }
     }
-    //while(true); //Para pruebas
 
     std::cout << "Fin Initialize()" << std::endl;
 
@@ -135,12 +181,18 @@ int DDS_MPI::Initialize(int &argc, char* argv[])
     return DDSMPI_SUCCESS;
 }
 
-void DDS_MPI::Finalize()
+int DDS_MPI::Finalize()
 {
+    // Chequeo de errorres
+    if(!initialized){
+        std::cerr << "Finalize(): initialized is FALSE. Initialize first" << std::endl;
+        return DDSMPI_INIT_FALSE;
+    }
+
     // Eliminamos el dataReader
     if(subscriber -> delete_datareader(reader) != eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK)
     {
-        std::cerr << "Error en Finalize(): delete_datareader" << std::endl;
+        std::cerr << "Finalize(): delete_datareader" << std::endl;
     }
     reader = nullptr;
 
@@ -210,7 +262,7 @@ int DDS_MPI::Send(void *buf, int count, int dest, int tag)
     // La identidad de la instancia debe deducirse automaticamente de la clave de los datos de la instancia
     ReturnCode_t rt = writer->write((void *)&sample,eprosima::fastrtps::rtps::InstanceHandle_t()); 
     if(rt == eprosima::fastrtps::types::ReturnCode_t::RETCODE_PRECONDITION_NOT_MET){
-        std::cerr << "Error in Send(): write() - RETCODE_ERROR" << std::endl;
+        std::cerr << "Error in Send(): write() - RETCODE_PRECONDITION_NOT_MET" << std::endl;
         return DDSMPI_ERR;
     }else if(rt == eprosima::fastrtps::types::ReturnCode_t::RETCODE_TIMEOUT){
         std::cerr << "Error in Send(): write() - RETCODE_TIMEOUT" << std::endl;
@@ -352,14 +404,15 @@ int DDS_MPI::IRecv(void *buf, int count, int source, int tag, Request *request)
 }
 
 
-// FUNCIONES PRIVADAS
+//---------- FUNCIONES PRIVADAS ----------
 
+// Cuidado: Los argumentos con sus valores deben estar separados con un espacio
 bool DDS_MPI::GetArg(int &argc, char* argv[], const char *arg, int &value)
 {
     bool found = false;
     for(int i = 0; i < argc; i++){
-        if(strcmp(argv[i],arg)==0){
-            found=true;
+        if(strcmp(argv[i],arg) == 0){
+            found = true;
             value = atoi(argv[i+1]);
         }
     }
